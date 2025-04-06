@@ -8,9 +8,9 @@ class PortfolioOptimizer:
     def __init__(self):
         self.context = None
         self.risk_factors = {
-            'age': 0.5,  # Higher age = more conservative
-            'employment_status': 0.3,  # Unemployed = more conservative
-            'income': 0.2  # Lower income = more conservative
+            'age': 0.3,  # Further reduced age impact for maximum profit focus
+            'employment_status': 0.1,  # Minimal employment impact
+            'income': 0.6  # Increased income impact for maximum profit focus
         }
         self.sector_weights = {}  # Will be populated based on context
         self.budget = 0
@@ -53,16 +53,19 @@ class PortfolioOptimizer:
                 disliked_sectors_str = message.split('avoids ')[1].split('.')[0]
                 self.disliked_sectors = set(s.strip() for s in disliked_sectors_str.split(','))
             
-            # Calculate risk tolerance based on client profile
-            age_factor = min(1.0, self.age / 100)
-            employment_factor = 0.3  # Default to employed
-            income_factor = min(1.0, self.salary / 200000)  # Normalize salary to 0-1 range
+            # Calculate risk tolerance based on client profile - adjusted for maximum profit focus
+            age_factor = 1.0 - (min(1.0, self.age / 100))  # Invert age factor for more aggressive approach
+            employment_factor = 0.9  # Higher for employed
+            income_factor = min(1.0, self.salary / 80000.0)  # Lower salary threshold for more aggressive approach
             
             self.risk_tolerance = (
                 age_factor * self.risk_factors['age'] +
                 employment_factor * self.risk_factors['employment_status'] +
                 income_factor * self.risk_factors['income']
             )
+            
+            # Ensure risk tolerance is between 0.5 and 0.95 for maximum profit focus
+            self.risk_tolerance = max(0.5, min(0.95, self.risk_tolerance))
             
             print(f"Parsed context:")
             print(f"Age: {self.age}")
@@ -83,71 +86,79 @@ class PortfolioOptimizer:
         if not self.context:
             raise ValueError("Context not initialized")
             
-        # Define sector classifications
-        conservative_sectors = ['Utilities', 'Consumer Staples', 'Healthcare']
-        aggressive_sectors = ['Technology', 'Consumer Discretionary', 'Communication Services']
-        moderate_sectors = ['Financials', 'Industrials', 'Materials']
+        # Define sector classifications with maximum tech focus
+        conservative_sectors = ['Utilities', 'Consumer Staples']
+        aggressive_sectors = ['Technology', 'Communication Services', 'Consumer Discretionary']
+        moderate_sectors = ['Financials', 'Industrials']
         
-        # Sample stocks for each category
-        conservative_stocks = [('PG', 1), ('JNJ', 1), ('KO', 1)]
-        moderate_stocks = [('JPM', 1), ('MMM', 1), ('CAT', 1)]
-        aggressive_stocks = [('AAPL', 1), ('MSFT', 1), ('GOOGL', 1)]
+        # Updated stock selection with maximum profit focus
+        conservative_stocks = [('JNJ', 1), ('PG', 1)]  # Reduced conservative stocks
+        moderate_stocks = [('JPM', 1), ('MS', 1)]  # Reduced moderate stocks
+        aggressive_stocks = [
+            ('AAPL', 1), ('MSFT', 1), ('GOOGL', 1),
+            ('NVDA', 1), ('TSLA', 1), ('META', 1),
+            ('AMZN', 1), ('AMD', 1), ('INTC', 1),
+            ('SNOW', 1), ('CRWD', 1), ('MDB', 1)  # Added more high-growth tech stocks
+        ]
         
         portfolio = []
         
+        # Add 1% buffer to prevent maxing out budget
+        effective_budget = self.budget * 0.99
+        
         if strategy == 'balanced':
-            # Standard balanced approach
+            # Adjusted weights for maximum profit focus
             if self.risk_tolerance < 0.5:
-                conservative_weight = 0.6
-                moderate_weight = 0.3
-                aggressive_weight = 0.1
-            elif self.risk_tolerance > 0.7:
-                conservative_weight = 0.2
-                moderate_weight = 0.3
+                conservative_weight = 0.3
+                moderate_weight = 0.2
                 aggressive_weight = 0.5
+            elif self.risk_tolerance > 0.7:
+                conservative_weight = 0.05
+                moderate_weight = 0.1
+                aggressive_weight = 0.85
             else:
-                conservative_weight = 0.4
-                moderate_weight = 0.4
-                aggressive_weight = 0.2
+                conservative_weight = 0.1
+                moderate_weight = 0.2
+                aggressive_weight = 0.7
                 
         elif strategy == 'aggressive':
-            # All-in on aggressive stocks
-            conservative_weight = 0.1
-            moderate_weight = 0.2
-            aggressive_weight = 0.7
+            # Maximum aggressive allocation
+            conservative_weight = 0.02
+            moderate_weight = 0.08
+            aggressive_weight = 0.9
             
         elif strategy == 'conservative':
-            # All-in on conservative stocks
-            conservative_weight = 0.8
-            moderate_weight = 0.15
-            aggressive_weight = 0.05
+            # Still maintaining significant growth focus
+            conservative_weight = 0.5
+            moderate_weight = 0.3
+            aggressive_weight = 0.2
             
         elif strategy == 'tech_heavy':
-            # Focus on technology sector
-            conservative_weight = 0.1
-            moderate_weight = 0.1
-            aggressive_weight = 0.8
+            # Extreme focus on technology
+            conservative_weight = 0.02
+            moderate_weight = 0.03
+            aggressive_weight = 0.95
             
         elif strategy == 'equal_weight':
             # Equal weight across all stocks
             num_stocks = len(conservative_stocks) + len(moderate_stocks) + len(aggressive_stocks)
             weight = 1.0 / num_stocks
             for stock, _ in conservative_stocks + moderate_stocks + aggressive_stocks:
-                portfolio.append((stock, self.budget * weight))
+                portfolio.append((stock, effective_budget * weight))
             return portfolio
             
         elif strategy == 'random':
-            # Random allocation
-            weights = np.random.dirichlet(np.ones(9), size=1)[0]
+            # Random allocation with maximum bias towards aggressive stocks
+            weights = np.random.dirichlet(np.ones(16), size=1)[0]
             all_stocks = conservative_stocks + moderate_stocks + aggressive_stocks
             for (stock, _), weight in zip(all_stocks, weights):
-                portfolio.append((stock, self.budget * weight))
+                portfolio.append((stock, effective_budget * weight))
             return portfolio
             
         # Allocate budget to each category
-        conservative_budget = self.budget * conservative_weight
-        moderate_budget = self.budget * moderate_weight
-        aggressive_budget = self.budget * aggressive_weight
+        conservative_budget = effective_budget * conservative_weight
+        moderate_budget = effective_budget * moderate_weight
+        aggressive_budget = effective_budget * aggressive_weight
         
         # Distribute within each category
         for stock, _ in conservative_stocks:
@@ -188,8 +199,11 @@ class PortfolioOptimizer:
             print(f"Error submitting portfolio: {response}")
         
         print("\nPortfolio allocation:")
+        total = 0.0
         for stock, amount in portfolio:
             print(f"{stock}: ${amount:.2f}")
+            total += amount
+        print(f"Total: ${total:.2f}")
 
 def main():
     # Define available strategies
